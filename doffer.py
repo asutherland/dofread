@@ -159,8 +159,6 @@ class Doffy(object):
         f.seek(section.offset)
         header = dof_hdr_t.from_fileobj(f, **kw)
         
-        print 'HEADER SAYS', header.secnum
-
         strtab = None
         def getstr(idx):
             eoff = strtab.index('\0', idx)
@@ -173,25 +171,33 @@ class Doffy(object):
             dof_secs.append(dof_sec)
         
         for dof_sec in dof_secs:
-            if dof_sec.type == DOF_SECT_STRTAB:
-                print 'found strtab!'
-                f.seek(BASE_OFFSET + dof_sec.offset)
-                strtab = f.read(dof_sec.size)
-            elif dof_sec.type == DOF_SECT_PROVIDER:
+            if dof_sec.type == DOF_SECT_PROVIDER:
                 print 'found provider!'
                 f.seek(BASE_OFFSET + dof_sec.offset)
                 provider = dof_provider_t.from_fileobj(f, **kw)
-                print '  name:', getstr(provider.name)
+                
+                # -- load the sttab
+                if dof_secs[provider.strtab].type == DOF_SECT_STRTAB:
+                    strtab_sec = dof_secs[provider.strtab]
+                    f.seek(BASE_OFFSET + strtab_sec.offset)
+                    strtab = f.read(strtab_sec.size)
+                    DO_EVIL = True
+                    if DO_EVIL:
+                        strtab_evil = strtab.replace('javascript', 'wavascript')
+                        f.seek(BASE_OFFSET + strtab_sec.offset)
+                        f.write(strtab_evil)
+                
+                print '  Name:', getstr(provider.name)
                 # -- load the offsets
                 if dof_secs[provider.proffs].type == DOF_SECT_PROFFS:
                     offsets_sec = dof_secs[provider.proffs]
                     f.seek(BASE_OFFSET + offsets_sec.offset)
                     num_offsets = offsets_sec.size / 4
-                    print 'Offset Count:', num_offsets
+                    print '  Offset Count:', num_offsets
                     probe_offsets = struct.unpack(kw['_endian_'] + ('%dL' % (num_offsets,)),
                                                   f.read(offsets_sec.size))
                 else:
-                    print '*** No Probe Offsets!'
+                    print '  *** No Probe Offsets!'
                     probe_offsets = []
                 
                 # load the enabled offsets
@@ -200,11 +206,11 @@ class Doffy(object):
                     en_offsets_sec = dof_secs[provider.prenoffs]
                     f.seek(BASE_OFFSET + en_offsets_sec.offset)
                     num_en_offsets = en_offsets_sec.size / 4
-                    print 'Enabled Offset Count:', num_en_offsets
+                    print '  Enabled Offset Count:', num_en_offsets
                     probe_en_offsets = struct.unpack(kw['_endian_'] + ('%dL' % (num_en_offsets,)),
                                                      f.read(en_offsets_sec.size))
                 else:
-                    print '*** No Probe Enable Offsets!'
+                    print '  *** No Probe Enable Offsets!'
                     probe_en_offsets = []
                 
                 # -- load the probes
@@ -227,7 +233,7 @@ class Doffy(object):
 
     def get_dof_data(self):        
         self.dofs = {}
-        f = open(self.filename, 'rb')
+        f = open(self.filename, 'rb+')
         for section in self.get_dof_sections():
             dof = self.load_dof(f, section)
         f.close()
